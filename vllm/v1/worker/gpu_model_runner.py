@@ -6551,6 +6551,10 @@ class GPUModelRunner(
         kv_cache_config: KVCacheConfig,
         is_profiling: bool = False,
     ) -> None:
+        print(
+            f"[YCHDEBUG] [gpu_model_runner] [initialize_attn_backend] kv_cache_config: num_blocks {kv_cache_config.num_blocks}, kv_cache_tensors {len(kv_cache_config.kv_cache_tensors)}, kv_cache_groups {len(kv_cache_config.kv_cache_groups)}",
+            flush=True,
+        )
         """
         Initialize the attention backends and attention metadata builders.
         """
@@ -6632,6 +6636,16 @@ class GPUModelRunner(
 
         for i, attn_backend_map in enumerate(attention_backend_maps):
             self.attn_groups.append(create_attn_groups(attn_backend_map, i))
+
+        print(
+            f"[YCHDEBUG] [gpu_model_runner] [initialize_attn_backend] attn_backend len is {len(self.attn_groups)}",
+            flush=True,
+        )
+        for i, ag in enumerate(self.attn_groups):
+            print(
+                f"[YCHDEBUG] [gpu_model_runner] [initialize_attn_backend] attn_backend {i} is {ag}",
+                flush=True,
+            )
 
     def initialize_metadata_builders(
         self, kv_cache_config: KVCacheConfig, kernel_block_sizes: list[int]
@@ -7085,6 +7099,10 @@ class GPUModelRunner(
         # Try creating KV caches optimized for kv-connector transfers
         cache_dtype = self.cache_config.cache_dtype
         if self.use_uniform_kv_cache(self.attn_groups, cache_dtype):
+            print(
+                "[YCHDEBUG] [gpu_model_runner] [initialize_kv_cache_tensors] enter if branch",
+                flush=True,
+            )
             kv_caches, cross_layers_kv_cache, attn_backend = (
                 self.allocate_uniform_kv_caches(
                     kv_cache_config,
@@ -7097,6 +7115,10 @@ class GPUModelRunner(
             self.cross_layers_kv_cache = cross_layers_kv_cache
             self.cross_layers_attn_backend = attn_backend
         else:
+            print(
+                "[YCHDEBUG] [gpu_model_runner] [initialize_kv_cache_tensors] enter else branch",
+                flush=True,
+            )
             # Fallback to the general case
             # Initialize the memory buffer for KV cache
             kv_cache_raw_tensors = self._allocate_kv_cache_tensors(kv_cache_config)

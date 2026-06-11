@@ -991,6 +991,7 @@ class UniformTypeKVCacheSpecs(KVCacheSpec):
         return list(set(spec.page_size_bytes for spec in self.kv_cache_specs.values()))
 
     def get_num_layer_tuples(self) -> int:
+        print([spec.page_size_bytes for spec in self.kv_cache_specs.values()])
         return Counter(
             spec.page_size_bytes for spec in self.kv_cache_specs.values()
         ).most_common(1)[0][1]

@@ -1262,6 +1262,10 @@ def get_kv_cache_config_from_groups(
     if len(kv_cache_groups) == 1 and isinstance(
         kv_cache_groups[0].kv_cache_spec, UniformTypeKVCacheSpecs
     ):
+        print(
+            "[YCHDEBUG] [kv_cache_utils] [get_kv_cache_config_from_groups] enter if branch",
+            flush=True,
+        )
         # Special case: all layers have the same type of KV cache but with
         # different hidden sizes. Allocate different amount of memory for each
         # layer based on its hidden size.
@@ -1281,12 +1285,20 @@ def get_kv_cache_config_from_groups(
         isinstance(group.kv_cache_spec, UniformTypeKVCacheSpecs)
         for group in kv_cache_groups
     ):
+        print(
+            "[YCHDEBUG] [kv_cache_utils] [get_kv_cache_config_from_groups] enter elif branch",
+            flush=True,
+        )
         # DeepseekV4: UniformTypeKVCacheSpecs but multiple groups.
         # Delegate to the DeepseekV4-specific allocator.
         num_blocks, kv_cache_tensors = _get_kv_cache_config_deepseek_v4(
             vllm_config, kv_cache_groups, available_memory
         )
     else:
+        print(
+            "[YCHDEBUG] [kv_cache_utils] [get_kv_cache_config_from_groups] enter else branch",
+            flush=True,
+        )
         # General case:
         # We will have group_size memory pools, each is shared by one layer from
         # each group. As layers of different groups have different block table,
@@ -1429,6 +1441,9 @@ def group_and_unify_kv_cache_specs(
     ):
         return None
 
+    # 在这里会将 mla_spec group 为一个组，swa_spec 则会根据block_size和sliding_window的值决定group几个组
+    # 在pangu92b模型中，dsa attn和indexer都是mla，在同一个group，mome_attn和swa_attn block_size不一样，所以是两个
+
     mla_specs: dict[str, KVCacheSpec] = {}
     grouped_swa_mla_specs: dict[tuple[int, int], dict[str, KVCacheSpec]] = defaultdict(
         dict
@@ -1521,14 +1536,26 @@ def _get_kv_cache_groups_uniform_groups(
     num_layer_tuples_per_group: list[int] = [
         g_spec.get_num_layer_tuples() for g_spec in grouped_specs
     ]
+    print(
+        f"[YCHDEBUG] [kv_cache_utils] [_get_kv_cache_groups_uniform_groups] num_layer_tuples_per_group is {num_layer_tuples_per_group}",
+        flush=True,
+    )
     # Choose `num_layer_tuples` to minimize total padding across groups.
     num_layer_tuples = _approximate_gcd(
         num_layer_tuples_per_group, lower_bound=num_layer_tuples_per_group[0]
+    )
+    print(
+        f"[YCHDEBUG] [kv_cache_utils] [_get_kv_cache_groups_uniform_groups] num_layer_tuples is {num_layer_tuples}",
+        flush=True,
     )
     # Round up to the nearest multiple of `num_layer_tuples` (i.e., padding)
     num_layer_tuples_per_group = [
         round_up(x, num_layer_tuples) for x in num_layer_tuples_per_group
     ]
+    print(
+        f"[YCHDEBUG] [kv_cache_utils] [_get_kv_cache_groups_uniform_groups] num_layer_tuples_per_group after roundup is {num_layer_tuples_per_group}",
+        flush=True,
+    )
 
     swa_mla_specs = grouped_specs[1:]
     assert all(
@@ -1637,16 +1664,34 @@ def get_kv_cache_groups(
         return []
 
     if is_kv_cache_spec_uniform(kv_cache_spec):
+        print(
+            "[YCHDEBUG] [kv_cache_utils] [get_kv_cache_groups] enter is_kv_cache_spec_uniform branch",
+            flush=True,
+        )
         # KV cache of all layers are the same, which is true for
         # most models. Allocate the same amount of memory for
         # each layer.
         return _get_kv_cache_groups_uniform_spec(kv_cache_spec)
     elif uniform_spec := UniformTypeKVCacheSpecs.from_specs(kv_cache_spec):
+        print(
+            "[YCHDEBUG] [kv_cache_utils] [get_kv_cache_groups] enter uniform_spec branch",
+            flush=True,
+        )
         # All layers need the same number of token slots (e.g., all layers are
         # full attention, or all layers are sliding window attention with the
         # same window size). Put all layers into one group.
         return _get_kv_cache_groups_uniform_type(uniform_spec)
     elif grouped_specs := group_and_unify_kv_cache_specs(kv_cache_spec):
+        print(
+            f"[YCHDEBUG] [kv_cache_utils] [get_kv_cache_groups] enter grouped_specs branch, grouped_specs len is {len(grouped_specs)}",
+            flush=True,
+        )
+        for grouped_spec in grouped_specs:
+            print(
+                f"[YCHDEBUG] [kv_cache_utils] [get_kv_cache_groups] grouped_spec kv_cache_specs layer is {list(grouped_spec.kv_cache_specs.keys())}",
+                flush=True,
+            )
+
         # DeepseekV4 case: All layers need the same number of token slots,
         # yet some layers are full attention while others are sliding window
         # attention in different sizes. Need to group layers into multiple
@@ -1982,6 +2027,10 @@ def get_kv_cache_configs(
     # have the same KV cache spec.
     merged_kv_cache_specs: dict[str, KVCacheSpec] = {}
     for kv_cache_spec_one_worker in kv_cache_specs:
+        print(
+            f"[YCHDEBUG] [kv_cache_utils] kv_cache_spec_one_worker len is {len(kv_cache_spec_one_worker)}",
+            flush=True,
+        )
         for layer_name, layer_spec in kv_cache_spec_one_worker.items():
             if layer_name not in merged_kv_cache_specs:
                 merged_kv_cache_specs[layer_name] = layer_spec
@@ -1991,10 +2040,26 @@ def get_kv_cache_configs(
                     "across workers. This is not supported yet."
                 )
 
+    print(
+        f"[YCHDEBUG] [kv_cache_utils] merged_kv_cache_specs len is {len(merged_kv_cache_specs)}",
+        flush=True,
+    )
+
     # Get global KV cache groups. This also handles spec unification for
     # hybrid models when disable_hybrid_kv_cache_manager is enabled.
     # After this call, merged_kv_cache_specs may be modified in-place.
     global_kv_cache_groups = get_kv_cache_groups(vllm_config, merged_kv_cache_specs)
+
+    print(
+        f"[YCHDEBUG] [kv_cache_utils] global_kv_cache_groups len is {len(global_kv_cache_groups)}",
+        flush=True,
+    )
+
+    for global_kv_cache_group in global_kv_cache_groups:
+        print(
+            f"[YCHDEBUG] [kv_cache_utils] global_kv_cache_group is {global_kv_cache_group}",
+            flush=True,
+        )
 
     # If original_max_model_len was -1, automatically
     # determine the maximum model length that fits in available GPU memory.
@@ -2054,6 +2119,11 @@ def get_kv_cache_configs(
                 vllm_config, projected_groups, available_memory_one_worker
             )
         )
+
+    print(
+        f"[YCHDEBUG] [kv_cache_utils] [get_kv_cache_configs] kv_cache_tensors len is {len(kv_cache_configs[0].kv_cache_tensors)}",
+        flush=True,
+    )
 
     # Change the num_blocks of each rank to the smallest among all ranks.
     # We also need to shrink the tensor size proportionally to avoid

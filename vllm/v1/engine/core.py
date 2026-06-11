@@ -115,6 +115,7 @@ class EngineCore:
         self.log_stats = log_stats
 
         # Setup Model.
+        print(f"[YCHDEBUG] [EngineCore] executor_class is {executor_class}", flush=True)
         self.model_executor = executor_class(vllm_config)
         if executor_fail_callback is not None:
             self.model_executor.register_failure_callback(executor_fail_callback)
@@ -235,6 +236,13 @@ class EngineCore:
         # Get all kv cache needed by the model
         kv_cache_specs = self.model_executor.get_kv_cache_specs()
 
+        for kv_cache_spec in kv_cache_specs:
+            for k, v in kv_cache_spec.items():
+                print(
+                    f"[YCHDEBUG] [EngineCore] [kv_cache_spec] key: {k}, value: {v}",
+                    flush=True,
+                )
+
         has_kv_cache = any(kv_cache_spec for kv_cache_spec in kv_cache_specs)
         if has_kv_cache:
             if envs.VLLM_ELASTIC_EP_SCALE_UP_LAUNCH:
@@ -257,6 +265,11 @@ class EngineCore:
 
         # Track max_model_len before KV cache config to detect auto-fit changes
         max_model_len_before = vllm_config.model_config.max_model_len
+
+        for gpu_mem in available_gpu_memory:
+            print(
+                f"[YCHDEBUG] [EngineCore] [gpu_memory] gpu_mem is {gpu_mem}", flush=True
+            )
 
         kv_cache_configs = get_kv_cache_configs(
             vllm_config, kv_cache_specs, available_gpu_memory

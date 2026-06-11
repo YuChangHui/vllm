@@ -89,7 +89,16 @@ def create_static_sink_attention_backend(
         page_size = kv_cache_spec.page_size_bytes // dtype_size
         indexer_head_size = getattr(kv_cache_spec, "indexer_head_size", None)
 
+        print(
+            f"[YCHDEBUG] [static_sink_attention] [reshape_kv_cache] kv_cache_spec is {kv_cache_spec}",
+            flush=True,
+        )
+
         if indexer_head_size is not None:
+            print(
+                f"[YCHDEBUG] [static_sink_attention] [reshape_kv_cache] if branch kv_cache_spec is {kv_cache_spec}",
+                flush=True,
+            )
             assert getattr(kv_cache_spec, "cache_dtype_str", None) != "fp8_ds_mla", (
                 "Composite DSA MLA KV cache reshape for fp8_ds_mla requires a "
                 "backend-specific mixed-dtype layout."
